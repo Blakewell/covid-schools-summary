@@ -1,0 +1,82 @@
+CREATE OR REPLACE VIEW `covid-schools-323512.covid_dataset.covid_school_cases_summary` as
+
+SELECT 
+    date_reported,
+    s.school,
+    staff,
+    students,
+    total_population,
+    active_percentage,
+    active_percentage_previous,
+    ROUND(active_percentage - active_percentage_previous,2) as active_percentage_difference,
+    active_cases,
+    active_cases_previous,
+    active_cases - active_cases_previous as active_cases_difference,
+    active_cases_students,
+    active_cases_students_previous,
+    active_cases_staff,
+    active_cases_staff_previous,
+    quarantine_students,
+    quarantine_students_percentage,
+    quarantine_students_previous,
+    quarantine_staff,
+    quarantine_staff_percentage,
+    quarantine_staff_previous,
+    quarantine_total,
+    quarantine_total_previous,
+    quarantine_total - quarantine_total_previous as quarantine_total_difference,
+    quarantine_percentage,
+    quarantine_percentage_previous,
+    quarantine_percentage - quarantine_percentage_previous as quarantine_percentage_difference,
+    school_type,
+    CONCAT(l.address, ", ", l.city," ",l.state,",", l.zipcode) as full_address,
+    l.district
+FROM
+(
+SELECT 
+    date_reported,
+    school,
+    staff,
+    students,
+    total_population,
+    active_percentage,
+    active_cases,
+    active_cases_students,
+    active_cases_staff,
+    quarantine_students,
+    quarantine_students_percentage,
+    quarantine_staff,
+    quarantine_staff_percentage,
+    quarantine_percentage,
+    quarantine_total,
+    COALESCE(LAG(active_cases) OVER (partition by school ORDER BY date_reported),0) as active_cases_previous,
+    COALESCE(LAG(active_percentage) OVER (partition by school ORDER BY date_reported),0) as active_percentage_previous,
+    COALESCE(LAG(active_cases_students) OVER (partition by school ORDER BY date_reported),0) as active_cases_students_previous,
+    COALESCE(LAG(active_cases_staff) OVER (partition by school ORDER BY date_reported),0) as active_cases_staff_previous,
+    COALESCE(LAG(quarantine_students) OVER (partition by school ORDER BY date_reported),0) as quarantine_students_previous,
+    COALESCE(LAG(quarantine_staff) OVER (partition by school ORDER BY date_reported),0) as quarantine_staff_previous,
+    COALESCE(LAG(quarantine_total) OVER (partition by school ORDER BY date_reported),0) as quarantine_total_previous,
+    COALESCE(LAG(quarantine_percentage) OVER (partition by school ORDER BY date_reported),0) as quarantine_percentage_previous 
+FROM
+(
+SELECT 
+    date_reported, 
+    school, 
+    staff, 
+    students, 
+    staff + students as total_population,
+    active_cases,
+    active_cases_students,
+    active_cases_staff,
+    quarantine_students,
+    quarantine_staff,
+    COALESCE(quarantine_staff + quarantine_students,0) as quarantine_total,
+    ROUND(active_cases / (staff + students) * 100,2) as active_percentage,
+    CASE WHEN students = 0 then 0 else ROUND(active_cases_students / students * 100,2) end as active_students_percentage,
+    COALESCE(ROUND(active_cases_staff / staff * 100,2),0) as active_staff_percentage,
+    CASE WHEN quarantine_students = 0 THEN 0 ELSE ROUND(quarantine_students / students * 100, 2) END as quarantine_students_percentage,
+    CASE WHEN quarantine_staff = 0 THEN 0 ELSE ROUND(quarantine_staff / staff * 100, 2) END as quarantine_staff_percentage,
+    CASE WHEN (quarantine_students + quarantine_staff) = 0 THEN 0 ELSE ROUND(((quarantine_students + quarantine_staff)/(staff + students)) * 100, 2) END as quarantine_percentage
+FROM `covid-schools-323512.covid_dataset.covid_school_cases` ) 
+) s 
+LEFT JOIN `covid-schools-323512.covid_dataset.school_locations` l on s.school = l.school
